@@ -1,0 +1,20 @@
+create table if not exists User_search (
+	Id serial primary key,
+	user_id integer not null unique,
+	user_url text not null unique
+);
+
+create table if not exists Vk_user(
+	Id serial primary key,
+	user_first_name varchar (60) not null,
+	user_second_name varchar (60) not null,
+	user_id integer not null unique,
+	user_url text not null unique,
+	user_search_id integer references User_search(user_id)
+);
+
+create table if not exists User_photo (
+	Id serial primary key,
+	photo_url text not null unique,
+	vk_user_id integer references Vk_user(user_id)
+);

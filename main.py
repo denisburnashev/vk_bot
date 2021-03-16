@@ -19,7 +19,10 @@ with open('dbuser.txt', 'r') as file_object:
 with open('dbpassword.txt', 'r') as file_object:
     bd_password = file_object.read().strip()
 
-engine = sqlalchemy.create_engine(f'postgresql://{bd_user}:{bd_password}@localhost:5432/searching_result_bd')
+with open('dbname.txt', 'r') as file_object:
+    bd_name = file_object.read().strip()
+
+engine = sqlalchemy.create_engine(f'postgresql://{bd_user}:{bd_password}@localhost:5432/{bd_name}')
 connection = engine.connect()
 
 people_ids = []
