@@ -4,12 +4,23 @@ import time
 from datetime import date
 from vk_api.longpoll import VkLongPoll, VkEventType
 from random import randrange
+import sqlalchemy
+
 
 with open('VKtoken.txt', 'r') as file_object:
     vktoken = file_object.read().strip()
 
 with open('group_token.txt', 'r') as file_object:
     token = file_object.read().strip()
+
+with open('dbuser.txt', 'r') as file_object:
+    bd_user = file_object.read().strip()
+
+with open('dbpassword.txt', 'r') as file_object:
+    bd_password = file_object.read().strip()
+
+engine = sqlalchemy.create_engine(f'postgresql://{bd_user}:{bd_password}@localhost:5432/searching_result_bd')
+connection = engine.connect()
 
 people_ids = []
 people_photo_url = []
@@ -26,6 +37,30 @@ class Bot:
             'access_token': self.token,
             'v': self.version
         }
+
+    def user_base_first_name(self, user_id):
+        time.sleep(1)
+
+        user_base_name_url = self.url + 'users.get'
+        user_base_name_params = {
+            'user_ids': user_id
+        }
+        res = requests.get(user_base_name_url, params={**self.params, **user_base_name_params})
+        res = res.json()
+        first_name = res['response'][0]['first_name']
+        return first_name
+
+    def user_base_last_name(self, user_id):
+        time.sleep(1)
+
+        user_base_last_name_url = self.url + 'users.get'
+        user_base_last_name_params = {
+            'user_ids': user_id
+        }
+        res = requests.get(user_base_last_name_url, params={**self.params, **user_base_last_name_params})
+        res = res.json()
+        last_name = res['response'][0]['last_name']
+        return last_name
 
     def user_sex(self, user_id):
         time.sleep(1)
@@ -206,13 +241,29 @@ for event in longpoll.listen():
                                          f'а если ты хочешь найти для друга введи - для друга и '
                                          f'через пробел укажи его id')
             elif request == 'для себя':
-                searching_params['user_id'] = event.user_id
-                write_msg(event.user_id, f'Отлично, ты хочешь найти новых знакомых для себя,'
-                                         f'я могу предложить два варианта поиска:\n'
-                                         f'если интересует быстрый поиск просто введи - быстрый поиск '
-                                         f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля\n'
-                                         f'если же интересует детальный поиск просто введи - детальный поиск '
-                                         f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля')
+                people_is_exists = []
+                info = connection.execute(f"""SELECT * FROM user_search;""").fetchall()
+                for user in info:
+                    user = user[1]
+                    people_is_exists.append(str(user))
+                if str(event.user_id) in people_is_exists:
+                    searching_params['user_id'] = event.user_id
+                    write_msg(event.user_id, f'Отлично, ты хочешь найти новых знакомых для себя,'
+                                             f'я могу предложить два варианта поиска:\n'
+                                             f'если интересует быстрый поиск просто введи - быстрый поиск '
+                                             f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля\n'
+                                             f'если же интересует детальный поиск просто введи - детальный поиск '
+                                             f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля')
+                    pass
+                else:
+                    connection.execute(f"""INSERT INTO User_search (user_id, user_url) VALUES ('{event.user_id}', 'https://vk.com/id{event.user_id}');""")
+                    searching_params['user_id'] = event.user_id
+                    write_msg(event.user_id, f'Отлично, ты хочешь найти новых знакомых для себя,'
+                                             f'я могу предложить два варианта поиска:\n'
+                                             f'если интересует быстрый поиск просто введи - быстрый поиск '
+                                             f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля\n'
+                                             f'если же интересует детальный поиск просто введи - детальный поиск '
+                                             f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля')
             elif request == 'для друга':
                 write_msg(event.user_id, f'Отлично просто напиши мне id его аккаунта.')
                 for event in longpoll.listen():
@@ -220,11 +271,26 @@ for event in longpoll.listen():
                         if event.to_me:
                             request = event.text
                             searching_params['user_id'] = request
-                            write_msg(event.user_id, f'если интересует быстрый поиск просто введи - быстрый поиск '
-                                                     f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля\n'
-                                                     f'если же интересует детальный поиск просто введи - '
-                                                     f'детальный поиск и в ответ я пришлю тебе ссылку '
-                                                     f'на аккаунт и топ 3 фото профиля')
+                            people_is_exists = []
+                            info = connection.execute(f"""SELECT * FROM user_search;""").fetchall()
+                            for user in info:
+                                user = user[1]
+                                people_is_exists.append(str(user))
+                            if searching_params['user_id'] in people_is_exists:
+                                write_msg(event.user_id,
+                                          f'если интересует быстрый поиск просто введи - быстрый поиск '
+                                          f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля\n'
+                                          f'если же интересует детальный поиск просто введи - '
+                                          f'детальный поиск и в ответ я пришлю тебе ссылку '
+                                          f'на аккаунт и топ 3 фото профиля')
+                                pass
+                            else:
+                                connection.execute(f"""INSERT INTO User_search (user_id, user_url) VALUES ('{searching_params['user_id']}', 'https://vk.com/id{searching_params['user_id']}');""")
+                                write_msg(event.user_id, f'если интересует быстрый поиск просто введи - быстрый поиск '
+                                                         f'и в ответ я пришлю тебе ссылку на аккаунт и топ 3 фото профиля\n'
+                                                         f'если же интересует детальный поиск просто введи - '
+                                                         f'детальный поиск и в ответ я пришлю тебе ссылку '
+                                                         f'на аккаунт и топ 3 фото профиля')
                             break
             elif request == 'быстрый поиск':
                 if (bot_vk.user_sex(searching_params['user_id']) is None) or \
@@ -237,24 +303,35 @@ for event in longpoll.listen():
                                                    bot_vk.user_city_id(searching_params['user_id']),
                                                    bot_vk.user_bdate(searching_params['user_id']),
                                                    bot_vk.user_bdate(searching_params['user_id']))
+                    people_is_exists = []
+                    info_user = connection.execute(f"""SELECT * FROM vk_user;""").fetchall()
+                    info_photo = connection.execute(f"""SELECT * FROM user_photo;""").fetchall()
+                    for user in info_user:
+                        user = user[3]
+                        people_is_exists.append(str(user))
                     for people in people_ids:
-                        people_photo_url.clear()
-                        if bot_vk.user_closed_open(people) is False:
-                            bot_vk.get_photos(people)
-                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                            for photo in people_photo_url:
-                                write_msg(event.user_id, f'{photo}')
-                        elif bot_vk.user_closed_open(people) is True:
-                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                            write_msg(event.user_id, f'к сожелению это закрытый профиль '
-                                                     f'и я не могу отправить тебе его или ее фото.')
+                        if str(people) in people_is_exists:
+                            pass
+                        else:
+                            connection.execute(f"""INSERT INTO vk_user (user_first_name, user_second_name, user_id, user_url, user_search_id) VALUES ('{bot_vk.user_base_first_name(people)}', '{bot_vk.user_base_last_name(people)}', '{people}', 'https://vk.com/id{people}', '{searching_params['user_id']}');""")
+                            people_photo_url.clear()
+                            if bot_vk.user_closed_open(people) is False:
+                                bot_vk.get_photos(people)
+                                write_msg(event.user_id, f'https://vk.com/id{str(people)}')
+                                for photo in people_photo_url:
+                                    connection.execute(f"""INSERT INTO user_photo (photo_url, vk_user_id) VALUES ('{photo}', '{people}');""")
+                                    write_msg(event.user_id, f'{photo}')
+                            elif bot_vk.user_closed_open(people) is True:
+                                write_msg(event.user_id, f'https://vk.com/id{str(people)}')
+                                write_msg(event.user_id, f'к сожелению это закрытый профиль '
+                                                         f'и я не могу отправить тебе его или ее фото.')
             elif request == 'детальный поиск':
                 write_msg(event.user_id, f'Отлично, давай тогда определися с несколькими параметрами.\n'
                                          f'Для начала давай определимся какого пола ты хочешь найти людей.\n'
                                          f'Мужского\n'
                                          f'Женского\n'
                                          f'Не имеет значения')
-            elif request == 'Мужского':
+            elif request == 'Мужского' or request == 'мужского':
                 searching_params['sex'] = 2
                 write_msg(event.user_id, f'Отлично, тепрерь перейдем к городу, в каком городе ты хочешь найти людей?')
                 for event in longpoll.listen():
@@ -265,7 +342,7 @@ for event in longpoll.listen():
                             if searching_params['city_id'] is None:
                                 write_msg(event.user_id, f'Не знаю такого города')
                             else:
-                                write_msg(event.user_id, f'{bot_vk.database_get_cities_id(request)}, красивый город, '
+                                write_msg(event.user_id, f'{request}, красивый город, '
                                                          f'осталось лишь с возрастным диапозоном поиска.\n'
                                                          f'Для начала укажи минимальны возраст '
                                                          f'с которого надо начать поиск.')
@@ -285,23 +362,34 @@ for event in longpoll.listen():
                                                                                         searching_params['city_id'],
                                                                                         searching_params['age_from'],
                                                                                         searching_params['age_to'])
+                                                    people_is_exists = []
+                                                    info_user = connection.execute(f"""SELECT * FROM vk_user;""").fetchall()
+                                                    info_photo = connection.execute(f"""SELECT * FROM user_photo;""").fetchall()
+                                                    for user in info_user:
+                                                        user = user[3]
+                                                        people_is_exists.append(str(user))
                                                     for people in people_ids:
-                                                        people_photo_url.clear()
-                                                        if bot_vk.user_closed_open(people) is False:
-                                                            bot_vk.get_photos(people)
-                                                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                                                            for photo in people_photo_url:
-                                                                write_msg(event.user_id, f'{photo}')
-                                                        elif bot_vk.user_closed_open(people) is True:
-                                                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                                                            write_msg(event.user_id,
-                                                                      f'к сожелению это закрытый профиль '
-                                                                      f'и я не могу отправить тебе его или ее фото.')
+                                                        if str(people) in people_is_exists:
+                                                            pass
+                                                        else:
+                                                            connection.execute(f"""INSERT INTO vk_user (user_first_name, user_second_name, user_id, user_url, user_search_id) VALUES ('{bot_vk.user_base_first_name(people)}', '{bot_vk.user_base_last_name(people)}', '{people}', 'https://vk.com/id{people}', '{searching_params['user_id']}');""")
+                                                            people_photo_url.clear()
+                                                            if bot_vk.user_closed_open(people) is False:
+                                                                bot_vk.get_photos(people)
+                                                                write_msg(event.user_id, f'https://vk.com/id{str(people)}')
+                                                                for photo in people_photo_url:
+                                                                    connection.execute(f"""INSERT INTO user_photo (photo_url, vk_user_id) VALUES ('{photo}', '{people}');""")
+                                                                    write_msg(event.user_id, f'{photo}')
+                                                            elif bot_vk.user_closed_open(people) is True:
+                                                                write_msg(event.user_id, f'https://vk.com/id{str(people)}')
+                                                                write_msg(event.user_id,
+                                                                          f'к сожелению это закрытый профиль '
+                                                                          f'и я не могу отправить тебе его или ее фото.')
                                                     break
 
                                         break
                             break
-            elif request == 'Женского':
+            elif request == 'Женского' or request == 'женского':
                 searching_params['sex'] = 1
                 write_msg(event.user_id, f'Отлично, тепрерь перейдем к городу, в каком городе ты хочешь найти людей?')
                 for event in longpoll.listen():
@@ -312,7 +400,7 @@ for event in longpoll.listen():
                             if searching_params['city_id'] is None:
                                 write_msg(event.user_id, f'Не знаю такого города')
                             else:
-                                write_msg(event.user_id, f'{bot_vk.database_get_cities_id(request)}, красивый город, '
+                                write_msg(event.user_id, f'{request}, красивый город, '
                                                          f'осталось лишь с возрастным диапозоном поиска.\n'
                                                          f'Для начала укажи минимальны возраст '
                                                          f'с которого надо начать поиск.')
@@ -332,23 +420,40 @@ for event in longpoll.listen():
                                                                                         searching_params['city_id'],
                                                                                         searching_params['age_from'],
                                                                                         searching_params['age_to'])
+                                                    people_is_exists = []
+                                                    info_user = connection.execute(
+                                                        f"""SELECT * FROM vk_user;""").fetchall()
+                                                    info_photo = connection.execute(
+                                                        f"""SELECT * FROM user_photo;""").fetchall()
+                                                    for user in info_user:
+                                                        user = user[3]
+                                                        people_is_exists.append(str(user))
                                                     for people in people_ids:
-                                                        people_photo_url.clear()
-                                                        if bot_vk.user_closed_open(people) is False:
-                                                            bot_vk.get_photos(people)
-                                                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                                                            for photo in people_photo_url:
-                                                                write_msg(event.user_id, f'{photo}')
-                                                        elif bot_vk.user_closed_open(people) is True:
-                                                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                                                            write_msg(event.user_id,
-                                                                      f'к сожелению это закрытый профиль '
-                                                                      f'и я не могу отправить тебе его или ее фото.')
+                                                        if str(people) in people_is_exists:
+                                                            pass
+                                                        else:
+                                                            connection.execute(
+                                                                f"""INSERT INTO vk_user (user_first_name, user_second_name, user_id, user_url, user_search_id) VALUES ('{bot_vk.user_base_first_name(people)}', '{bot_vk.user_base_last_name(people)}', '{people}', 'https://vk.com/id{people}', '{searching_params['user_id']}');""")
+                                                            people_photo_url.clear()
+                                                            if bot_vk.user_closed_open(people) is False:
+                                                                bot_vk.get_photos(people)
+                                                                write_msg(event.user_id,
+                                                                          f'https://vk.com/id{str(people)}')
+                                                                for photo in people_photo_url:
+                                                                    connection.execute(
+                                                                        f"""INSERT INTO user_photo (photo_url, vk_user_id) VALUES ('{photo}', '{people}');""")
+                                                                    write_msg(event.user_id, f'{photo}')
+                                                            elif bot_vk.user_closed_open(people) is True:
+                                                                write_msg(event.user_id,
+                                                                          f'https://vk.com/id{str(people)}')
+                                                                write_msg(event.user_id,
+                                                                          f'к сожелению это закрытый профиль '
+                                                                          f'и я не могу отправить тебе его или ее фото.')
                                                     break
 
                                         break
                             break
-            elif request == 'Не имеет значения':
+            elif request == 'Не имеет значения' or request == 'не имеет значения':
                 searching_params['sex'] = 0
                 write_msg(event.user_id, f'Отлично, тепрерь перейдем к городу, в каком городе ты хочешь найти людей?')
                 for event in longpoll.listen():
@@ -359,7 +464,7 @@ for event in longpoll.listen():
                             if searching_params['city_id'] is None:
                                 write_msg(event.user_id, f'Не знаю такого города')
                             else:
-                                write_msg(event.user_id, f'{bot_vk.database_get_cities_id(request)}, красивый город, '
+                                write_msg(event.user_id, f'{request}, красивый город, '
                                                          f'осталось лишь с возрастным диапозоном поиска.\n'
                                                          f'Для начала укажи минимальны возраст '
                                                          f'с которого надо начать поиск.')
@@ -379,18 +484,35 @@ for event in longpoll.listen():
                                                                                         searching_params['city_id'],
                                                                                         searching_params['age_from'],
                                                                                         searching_params['age_to'])
+                                                    people_is_exists = []
+                                                    info_user = connection.execute(
+                                                        f"""SELECT * FROM vk_user;""").fetchall()
+                                                    info_photo = connection.execute(
+                                                        f"""SELECT * FROM user_photo;""").fetchall()
+                                                    for user in info_user:
+                                                        user = user[3]
+                                                        people_is_exists.append(str(user))
                                                     for people in people_ids:
-                                                        people_photo_url.clear()
-                                                        if bot_vk.user_closed_open(people) is False:
-                                                            bot_vk.get_photos(people)
-                                                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                                                            for photo in people_photo_url:
-                                                                write_msg(event.user_id, f'{photo}')
-                                                        elif bot_vk.user_closed_open(people) is True:
-                                                            write_msg(event.user_id, f'https://vk.com/id{str(people)}')
-                                                            write_msg(event.user_id,
-                                                                      f'к сожелению это закрытый профиль '
-                                                                      f'и я не могу отправить тебе его или ее фото.')
+                                                        if str(people) in people_is_exists:
+                                                            pass
+                                                        else:
+                                                            connection.execute(
+                                                                f"""INSERT INTO vk_user (user_first_name, user_second_name, user_id, user_url, user_search_id) VALUES ('{bot_vk.user_base_first_name(people)}', '{bot_vk.user_base_last_name(people)}', '{people}', 'https://vk.com/id{people}', '{searching_params['user_id']}');""")
+                                                            people_photo_url.clear()
+                                                            if bot_vk.user_closed_open(people) is False:
+                                                                bot_vk.get_photos(people)
+                                                                write_msg(event.user_id,
+                                                                          f'https://vk.com/id{str(people)}')
+                                                                for photo in people_photo_url:
+                                                                    connection.execute(
+                                                                        f"""INSERT INTO user_photo (photo_url, vk_user_id) VALUES ('{photo}', '{people}');""")
+                                                                    write_msg(event.user_id, f'{photo}')
+                                                            elif bot_vk.user_closed_open(people) is True:
+                                                                write_msg(event.user_id,
+                                                                          f'https://vk.com/id{str(people)}')
+                                                                write_msg(event.user_id,
+                                                                          f'к сожелению это закрытый профиль '
+                                                                          f'и я не могу отправить тебе его или ее фото.')
                                                     break
 
                                         break
